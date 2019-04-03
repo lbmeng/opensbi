@@ -23,6 +23,8 @@
 #define REG_L		__REG_SEL(ld, lw)
 #define REG_S		__REG_SEL(sd, sw)
 
+#define PTE_SIZE	8
+
 	.align 3
 	.section .entry, "ax", %progbits
 	.globl _start
@@ -53,9 +55,54 @@ _start_warm:
 	csrw	CSR_SIP, zero
 
 	/* Setup exception vectors */
-	la	a3, _start_hang
+	li	a0, 0xffffffff80200000UL
+	la	t5, _start
+	sub	s3, a0, t5
+	la	a2, vec
+	add	a3, a2, s3
 	csrw	CSR_STVEC, a3
 
+	/*
+	 * Setup PTE for the following mapping:
+	 * 0xffffffff80000000 (V) -> 0x80000000 (P)
+	 * 0xffffffffffffffff (V) -> 0xffffffff (P)
+	 */
+	li	a0, 0x80000000
+	la	t0, pte
+
+	li	t1, 0xffffffff80000000UL
+	srli	t2, t1, 30
+	andi	t2, t2, 0x1ff
+	li	a2, PTE_SIZE
+	mulw	t2, t2, a2
+	add	t3, t0, t2
+
+	mv	t5, a0
+
+	srli	a0, a0, 30
+	slli	a0, a0, 28
+	li	t4, 0xcf
+	or	t4, a0, t4
+	sd	t4, (t3)
+
+	addi	t3, t3, PTE_SIZE
+	li	t1, 1 << 30	/* 1GiB size */
+	add	a0, t5, t1
+	srli	a0, a0, 30
+	slli	a0, a0, 28
+	li	t4, 0xcf
+	or	t4, a0, t4
+	sd	t4, (t3)
+
+	/* Enable sv39 mmu */
+	srli	t0, t0, 12
+	li	a2, (8ULL << 60)
+	or	t0, t0, a2
+	sfence.vma
+	csrw	satp, t0
+
+	.align 2
+vec:
 	/* Setup stack */
 	la	a3, _payload_end
 	li	a4, 0x2000
@@ -86,3 +133,8 @@ _boot_a0:
 	RISCV_PTR	0
 _boot_a1:
 	RISCV_PTR	0
+
+	.data
+	.align 12
+pte:
+	.space	0x1000, 0
