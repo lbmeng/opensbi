@@ -170,8 +170,13 @@ int sbi_hsm_init(struct sbi_scratch *scratch, u32 hartid, bool cold_boot)
 			rscratch = sbi_hart_id_to_scratch(scratch, i);
 			hdata = sbi_scratch_offset_ptr(rscratch,
 						       hart_data_offset);
-			ATOMIC_INIT(&hdata->state,
-			(i == hartid) ? SBI_HART_STARTING : SBI_HART_STOPPED);
+
+			if (scratch->options & SBI_SCRATCH_BOOT_ONE_HART_ONLY)
+				ATOMIC_INIT(&hdata->state,
+					    (i == hartid) ? SBI_HART_STARTING :
+					    SBI_HART_STOPPED);
+			else
+				ATOMIC_INIT(&hdata->state, SBI_HART_STARTING);
 		}
 	} else {
 		sbi_hsm_hart_wait(scratch, hartid);
